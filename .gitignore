@@ -1,0 +1,6 @@
+# Ignora
+env/
+__pycache__/
+
+# Ignora os arquivos de mapa
+**/data/ 
