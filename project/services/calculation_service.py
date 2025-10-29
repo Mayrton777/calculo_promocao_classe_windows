@@ -14,9 +14,8 @@ matplotlib.use('Agg')
 
 class CalculationService:
     def __init__(self, path_census_sectors: Path, path_uf: Path, data: dict):
-        # Caminho do mapa
         self.path_census_sectors = path_census_sectors
-        # Caminho do arquivo de UFs
+        
         with open(path_uf, 'r', encoding='utf-8') as file:
             self.uf_names = json.load(file)
 
@@ -80,18 +79,19 @@ class CalculationService:
         # DataFrame
         self.df = pd.DataFrame(self.gdf_census_municipalities)
 
-        # Filtra o DataFrame para encontrar o município desejado com base no estado e nome
-        matched_municipality = self.df[
-            (self.df['NM_MUN'] == self.proposed_municipality) & 
-            (self.df['NM_UF'] == self.proposed_name_state)
-        ]
-
-        # Captura o código do município ('CD_MUN') do primeiro resultado
-        if not matched_municipality.empty:
-            self.proposed_municipality_code = matched_municipality['CD_MUN'].iloc[0]
-        else:
-            self.proposed_municipality_code = None
-            print(f"Município '{self.proposed_municipality}' em '{self.proposed_name_state}' não encontrado no DataFrame.")
+        # Valida e obtém o código do município ATUAL
+        self.current_municipality_code = self._get_municipality_code(
+            self.current_municipality,
+            self.current_name_state,
+            "Atual"
+        )
+        
+        # Valida e obtém o código do município PROPOSTO
+        self.proposed_municipality_code = self._get_municipality_code(
+            self.proposed_municipality, 
+            self.proposed_name_state, 
+            "Proposto"
+        )
 
         self.promotion_period = {
             'C': {'B2': 0, 'B1': 0, 'A4': 2, 'A3': 2, 'A2': 6, 'A1': 6, 'E3': 8, 'E2': 10, 'E1': 12},
@@ -184,6 +184,34 @@ class CalculationService:
             }
         }
     
+    def _get_municipality_code(self, mun_name: str, state_name: str, mun_type: str) -> str:
+        """
+        Verifica um município no DataFrame e retorna seu código ('CD_MUN').
+        Levanta um MunicipalityNotFoundError se não for encontrado.
+        
+        Args:
+            mun_name: Nome do município (ex: "Rio Branco")
+            state_name: Nome do estado (ex: "Acre")
+            mun_type: String para a mensagem de erro (ex: "Atual" ou "Proposto")
+        """
+        # Filtra o DataFrame para encontrar o município
+        matched_municipality = self.df[
+            (self.df['NM_MUN'] == mun_name) & 
+            (self.df['NM_UF'] == state_name)
+        ]
+
+        # Captura o código do município
+        if not matched_municipality.empty:
+            # Retorna o código do primeiro resultado encontrado
+            return matched_municipality['CD_MUN'].iloc[0]
+        else:
+            # Levanta o erro com uma mensagem clara
+            raise ValueError(
+                f"Município {mun_type} '{mun_name}' em '{state_name}' não foi encontrado. "
+                "Verifique a ortografia e se a UF está correta."
+            )
+    
+
     def municipality_state(self, number_municipality, state):
         return f'{number_municipality} - {state}'
     
@@ -373,7 +401,6 @@ class CalculationService:
     
     def creat_map(self):
         fig, ax = plt.subplots(1,1,figsize=(12,10))
-        #ax.grid(color='grey', linestyle='--', linewidth=0.5)
 
         # Municípios atingidos pelo contorno protegido
         self.teste_mun.plot(ax=ax, color='None', edgecolor='black', linewidth=3)
@@ -382,39 +409,29 @@ class CalculationService:
         # Municípios com áreas urbanas atingidas pelo contorno protegido
         self.gdf_municipalities_with_urban_area_reached.plot(ax=ax, column='MUNICIPIO-UF', categorical=True, edgecolor='black', cmap='turbo', linewidth=0.1, alpha = 0.7, legend=False)
 
-        # Setores urbanos dos municípios atingidos pelo contorno protegido
-        #self.gdf_urban_census_sectors.plot(ax=ax, color='None', edgecolor='orange', linewidth=0.5)
-
         # Áreas urbanas atingidas pelo contorno protegido
         self.gdf_urban_sectors_cp_intersection.plot(ax=ax, color='None', edgecolor='red', linewidth=0.5)
 
         # Estação na situação proposta
         self.gdf_station.plot(ax=ax, color='yellow', edgecolor='black', linewidth=1.5)
-        #ax.annotate("ESTAÇÃO", xy=(gdf_estacao.geometry.x, gdf_estacao.geometry.y), xytext=(3, 3), textcoords="offset points", fontsize=6, color='black')
-
+       
         # Circunferência do contorno protegido teórico
         self.gdf_protected_contour.plot(ax = ax, color='none', edgecolor='red', linewidth=1.5, linestyle='dashed')
 
         # Mapa
         plt.title('Municípios com áreas urbanas atingidas pelo contorno protegido da classe proposta', fontsize=13, y=1.01)
-
-        # --- INÍCIO DA ALTERAÇÃO ---
         
-        # 1. Pega o diretório temporário do sistema
+        # Pega o diretório temporário do sistema
         temp_dir = tempfile.gettempdir()
 
-        # 2. Cria um nome de arquivo único
         imagem_name = self.process_number.replace('/', '-').replace('.', '_')
         mapa_filename = f'img_{imagem_name}.png'
-        
-        # 3. Cria o caminho completo no diretório temporário
         caminho_salvar_mapa_temp = os.path.join(temp_dir, mapa_filename)
 
-        # 4. Salva o mapa nesse caminho
         plt.savefig(caminho_salvar_mapa_temp)
-        plt.close(fig) # Fecha a figura para liberar a memória
+        plt.close(fig)
 
-        # 5. Retorna o caminho onde o mapa foi salvo
+        # Retorna o caminho onde o mapa foi salvo
         return caminho_salvar_mapa_temp
 
     def calculo_promocao_classe(self, population):
@@ -435,18 +452,10 @@ class CalculationService:
 
         # # População dos municípios cobertos
         self.Ptot = sum(num_population)
-
-        # if self.proposed_state == 'SP': # população do município de referência
-        #     if self.reference_city_code == '3509502':
-        #         self.Pref = int(1139047)
-        #     else:
-        #         self.Pref = int(20743587) 
-        # else:
         
         # Soma todos os v0001 do município de referência
         self.Pref = int(df_populacao[filtro_mun_ref]['v0001'].sum())
 
-        print(self.current_group)
         if self.current_group == 'A':
             if self.proposed_group == 'A':
                 self.Vab, self.Vbc = 0, 0
@@ -507,11 +516,8 @@ class CalculationService:
         
         self.calculo_promocao_classe(covered_municipalities)
         
-        # --- INÍCIO DA ALTERAÇÃO ---
-        # Capture o caminho do mapa retornado por creat_map()
         caminho_mapa_temporario = self.creat_map()
-        # --- FIM DA ALTERAÇÃO ---
-        
+    
         Tcp = self.tcp_value
         Ptot = self.Ptot
         municipio_referencia = self.reference_city
@@ -519,8 +525,6 @@ class CalculationService:
         Vbc = self.Vbc
         Pref = self.Pref
         Vpc = self.Vpc
-        
-        
         
         # # Imprima os resultados
         # print(f"Classe proposta: {proposed_class}\n")
