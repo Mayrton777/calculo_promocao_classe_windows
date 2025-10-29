@@ -40,7 +40,6 @@ def create_pdf(path_uf: Path, file_path: str, data: dict):
     vpc = data['vpc']
     ipca = data['ipca']
     map_path = data['caminho_mapa_temp']
-    print(map_path)
     
     dmax_normalized = locale.format_string("%.1f", float(dmax), grouping=True)
     pref_normalized = locale.format_string("%d", int(pref), grouping=True)
@@ -276,23 +275,12 @@ def create_pdf(path_uf: Path, file_path: str, data: dict):
     story.append(Paragraph(f"Portanto, o valor a ser cobrado pela promoção de classe é <b>R$ {ipca_normalized}</b>.", styles['Normal']))
     
     try:
-        # 2. Mova a criação do PDF para dentro do 'try'
         doc.build(story)
-        print(f"O arquivo PDF '{file_path}' foi gerado com sucesso.")
-
     finally:
-        # 3. O bloco 'finally' sempre executa, com sucesso ou falha.
-        #    Vamos excluir o arquivo de mapa temporário.
-        
-        # Verificamos se o arquivo ainda existe
         if os.path.exists(map_path):
             try:
-                # Tentamos remover o arquivo
                 os.remove(map_path)
-                print(f"Arquivo de mapa temporário '{map_path}' excluído.")
             except OSError as e:
-                # Se der erro (ex: arquivo bloqueado), apenas avisamos
                 print(f"AVISO: Não foi possível excluir o arquivo temporário '{map_path}': {e}")
         else:
-            # Se o arquivo já foi excluído por algum motivo
             print(f"AVISO: Mapa temporário '{map_path}' não encontrado para exclusão.")
