@@ -13,6 +13,7 @@ except Exception:
 # --- CAMINHOS DE DADOS ---
 PATH_SHP = PROJECT_ROOT / "data" / "mapa" / "BR_setores_CD2022.shp"
 PATH_UF_JSON = PROJECT_ROOT / "data" / "uf_code.json"
+PATH_IPCA_JSON = PROJECT_ROOT / "data" / "ipca.json"
 
 # --- DADOS DO FORMULÁRIO ---
 UFS = [

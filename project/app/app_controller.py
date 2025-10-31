@@ -118,7 +118,7 @@ class AppController:
             
             calculo = CalculationService(config.PATH_SHP, config.PATH_UF_JSON, dados_processados)
             resultado_calculo_promocao = calculo.get_results()
-            ipca_value, ipca_date = ipca_calculation(resultado_calculo_promocao['vpc'])
+            ipca_value, ipca_date = ipca_calculation(resultado_calculo_promocao['vpc'], config.PATH_IPCA_JSON)
             resultado_calculo_promocao['ipca'] = ipca_value
             resultado_calculo_promocao['data_ipca'] = ipca_date
 
