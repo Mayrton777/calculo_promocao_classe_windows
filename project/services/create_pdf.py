@@ -27,8 +27,13 @@ def create_pdf(path_uf: Path, file_path: str, data: dict):
         file_path (str): O caminho do arquivo PDF a ser gerado.
         data (dict): Um dicionário contendo os dados da estação.
     """
+    # 1. Carrega o dicionário original (ex: {"MG": "Minas Gerais"})
     with open(path_uf, 'r', encoding='utf-8') as file:
-            name_to_abbreviation = json.load(file)
+        sigla_para_nome = json.load(file)
+
+    # 2. CRIA O DICIONÁRIO INVERTIDO (ex: {"Minas Gerais": "MG"})
+    # Usamos .strip() para remover espaços em branco e garantir a busca
+    name_to_abbreviation = {v.strip(): k.strip() for k, v in sigla_para_nome.items()}
     
     # ------------------------------------------------
     # Formantando as variaves
@@ -219,7 +224,7 @@ def create_pdf(path_uf: Path, file_path: str, data: dict):
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold')
     ]))
     story.append(table_municipalities)
-    story.append(Spacer(1, 0.2 * inch))
+    story.append(Spacer(1, 0.1 * inch))
     story.append(Paragraph("Tabela 1: Municípios", styles['Text_img']))
     story.append(PageBreak())
 

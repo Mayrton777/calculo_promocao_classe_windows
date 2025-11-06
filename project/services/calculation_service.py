@@ -364,8 +364,19 @@ class CalculationService:
         station_coordinates = shapely.geometry.Point(self.proposed_longitude_decimal, self.proposed_latitude_decimal)
         self.gdf_station = gpd.GeoDataFrame(geometry=[station_coordinates], crs='EPSG:4674')
 
-        self.teste = self.gdf_census_municipalities.dissolve(by='CD_MUN', aggfunc={'NM_MUN': 'first', 'v0001': 'sum'})
+
+        self.teste = self.gdf_census_municipalities.dissolve(by='CD_MUN', aggfunc={'NM_MUN': 'first', 'NM_UF': 'first', 'v0001': 'sum'})
         self.teste_mun = gpd.sjoin(self.teste, self.gdf_protected_contour, predicate='intersects')
+
+        codigos_dos_municipios = self.teste_mun.index.unique()
+
+        self.setor_teste = self.gdf_census_municipalities[self.gdf_census_municipalities['CD_MUN'].isin(codigos_dos_municipios)].copy()
+
+
+        filtro_urbano_setor_teste = (self.setor_teste['SITUACAO'] == 'Urbana') & (self.setor_teste['NM_NU'].isnull()) & (self.setor_teste['NM_MUN'] == self.setor_teste['NM_DIST'])
+        
+        self.setores_urbanos_teste = self.setor_teste[filtro_urbano_setor_teste].reset_index(drop=True)
+        
         # Municípios que fazem interseção com o contorno protegido da classe do canal
         self.gdf_municipalities = gpd.sjoin(self.gdf_census_municipalities, self.gdf_protected_contour, predicate='intersects')
         self.gdf_municipalities = self.gdf_municipalities.drop('index_right', axis=1)
@@ -380,7 +391,8 @@ class CalculationService:
         gdf_census_sectors = gpd.read_file(self.path_census_sectors, mask=gdf_united_municipalities)
 
         # Setores censitários urbanos
-        urban_census_sectors_filter = gdf_census_sectors.SITUACAO == 'Urbana'
+        urban_census_sectors_filter = (gdf_census_sectors.SITUACAO == 'Urbana') & (gdf_census_sectors.NM_NU.isnull()) & (gdf_census_sectors.NM_MUN == gdf_census_sectors.NM_DIST)
+
         self.gdf_urban_census_sectors = gdf_census_sectors[urban_census_sectors_filter].reset_index(drop=True)
 
         # Geodataframe da interseção entre os setores censitários urbanos e o contorno protegido
@@ -388,23 +400,37 @@ class CalculationService:
         self.gdf_urban_sectors_cp_intersection = self.gdf_urban_sectors_cp_intersection.reset_index(drop=True)
 
         # Geodataframe dos municípios cujas áreas urbanas são intersectadas pelo contorno protegido
+        
+        # 1. Obter os códigos únicos dos municípios onde a ÁREA URBANA intersecta o contorno
+        # (Isso já estava correto)
         self.covered_municipalities_codes = list(self.gdf_urban_sectors_cp_intersection.CD_MUN.unique())
-        self.gdf_municipalities_with_urban_area_reached = self.gdf_municipalities[self.gdf_municipalities.CD_MUN.isin(self.covered_municipalities_codes)]
-        self.gdf_municipalities_with_urban_area_reached = self.gdf_municipalities_with_urban_area_reached.reset_index(drop=True)
 
+        # 2. Filtrar o GeoDataFrame de MUNICÍPIOS COMPLETOS (self.teste) usando esses códigos.
+        #    O self.teste está indexado por 'CD_MUN' (do dissolve), por isso usamos .index.isin()
+        self.gdf_municipalities_with_urban_area_reached = self.teste[self.teste.index.isin(self.covered_municipalities_codes)]
+
+        # 3. Resetar o índice para que 'CD_MUN' volte a ser uma coluna
+        #    (Não use drop=True, pois você quer manter o CD_MUN)
+        self.gdf_municipalities_with_urban_area_reached = self.gdf_municipalities_with_urban_area_reached.reset_index()
+
+        # 4. Criar a coluna 'MUNICIPIO-UF'
+        #    (Isto agora funciona pois 'NM_UF' foi adicionado ao aggfunc do dissolve na Etapa 1)
         self.gdf_municipalities_with_urban_area_reached['MUNICIPIO-UF'] = np.vectorize(self.municipality_state)(
             self.gdf_municipalities_with_urban_area_reached['NM_MUN'], self.gdf_municipalities_with_urban_area_reached['NM_UF'])
-        
+
         covered_municipalities = []
         for code in self.covered_municipalities_codes:
-            covered_municipalities.append(self.get_municipality_with_code(code))
+            covered_municipalities.append(self.get_municipality_with_code(code)) 
     
+
     def creat_map(self):
         fig, ax = plt.subplots(1,1,figsize=(12,10))
 
         # Municípios atingidos pelo contorno protegido
-        self.teste_mun.plot(ax=ax, color='None', edgecolor='black', linewidth=3)
-        self.gdf_municipalities.plot(ax=ax, color='None', edgecolor='black', linewidth=0.5)
+        #self.setor_teste.plot(ax=ax, color='None', edgecolor='black', linewidth=0.5)
+        self.teste_mun.plot(ax=ax, color='None', edgecolor='black', linewidth=2)
+        self.setores_urbanos_teste.plot(ax=ax, color='None', edgecolor='orange', linewidth=0.5)
+        #self.gdf_municipalities.plot(ax=ax, color='None', edgecolor='black', linewidth=0.5)
         
         # Municípios com áreas urbanas atingidas pelo contorno protegido
         self.gdf_municipalities_with_urban_area_reached.plot(ax=ax, column='MUNICIPIO-UF', categorical=True, edgecolor='black', cmap='turbo', linewidth=0.1, alpha = 0.7, legend=False)
@@ -414,7 +440,7 @@ class CalculationService:
 
         # Estação na situação proposta
         self.gdf_station.plot(ax=ax, color='yellow', edgecolor='black', linewidth=1.5)
-       
+        
         # Circunferência do contorno protegido teórico
         self.gdf_protected_contour.plot(ax = ax, color='none', edgecolor='red', linewidth=1.5, linestyle='dashed')
 
