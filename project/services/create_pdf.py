@@ -13,26 +13,23 @@ try:
 except locale.Error:
     """
     Se falhar, busca o nome do locale sem o '.UTF-8'
-    Esta é uma falha comum no Windows
     """
     locale.setlocale(locale.LC_ALL, 'pt_BR')
 
 
-def create_pdf(path_uf: Path, file_path: str, data: dict):
+def create_relatorio(path_uf: Path, file_path: str, data: dict):
     """
     Gera um PDF com os dados da estação e a imagem fornecida
 
     Args:
-        path_image (str): o caminho da imagem.
-        file_path (str): O caminho do arquivo PDF a ser gerado.
+        path_uf (Path): Caminho do arquivo UF.
+        file_path (str): Caminho do arquivo PDF a ser gerado.
         data (dict): Um dicionário contendo os dados da estação.
     """
-    # 1. Carrega o dicionário original (ex: {"MG": "Minas Gerais"})
+ 
     with open(path_uf, 'r', encoding='utf-8') as file:
         sigla_para_nome = json.load(file)
 
-    # 2. CRIA O DICIONÁRIO INVERTIDO (ex: {"Minas Gerais": "MG"})
-    # Usamos .strip() para remover espaços em branco e garantir a busca
     name_to_abbreviation = {v.strip(): k.strip() for k, v in sigla_para_nome.items()}
     
     # ------------------------------------------------
@@ -276,7 +273,7 @@ def create_pdf(path_uf: Path, file_path: str, data: dict):
     story.append(Paragraph(f"V<sub>pc</sub> = {vpc_normalized}", styles['Normal']))
     story.append(Spacer(1, 0.2 * inch))
     # Parágrafo 03
-    story.append(Paragraph(f"Conforme o Ofício nº 35528/2023/MCom, de 01/12/2023, solicitou-se à Anatel que aplicasse a correção monetária pelo IPCA, desde 01/08/2013 até {data['data_ipca']}, aos valores decorrentes da alteração de características técnicas que resultem em aumento de potência. Utilizando a calculadora de IPCA fornecida pelo Banco Central, o valor atualizado para a promoção de classe foi calculado em R$ {ipca_normalized}.", styles['Normal']))
+    story.append(Paragraph(f"Conforme o Ofício nº 35528/2023/MCom, de 01/12/2023, solicitou-se à Anatel que aplicasse a correção monetária pelo IPCA, desde 01/08/2013 até a data de emissão do boleto ({data['data_ipca']}), aos valores decorrentes da alteração de características técnicas que resultem em aumento de potência. Utilizando a calculadora de IPCA fornecida pelo Banco Central, o valor atualizado para a promoção de classe foi calculado em R$ {ipca_normalized}.", styles['Normal']))
     story.append(Paragraph(f"Portanto, o valor a ser cobrado pela promoção de classe é <b>R$ {ipca_normalized}</b>.", styles['Normal']))
     
     try:

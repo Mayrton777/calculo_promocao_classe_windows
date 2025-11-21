@@ -3,7 +3,7 @@ import os
 
 from .app_view import AppView 
 import config
-from services import CalculationService, capitalizar_string, create_pdf, ipca_calculation
+from services import CalculationService, capitalizar_string, create_word_doc, create_relatorio, ipca_calculation
 
 class AppController:
     def __init__(self, view: AppView):
@@ -32,8 +32,6 @@ class AppController:
 
     def _validate_form(self, data: dict) -> list[str]:
         """Valida os dados do formulário. Retorna uma lista de erros."""
-        
-        # Mapeia chaves do dicionário para "Nomes Amigáveis" e valores inválidos
         campos_a_validar = [
             ("numero_processo", "Número do processo", [""]),
             ("servico", "Serviço", [""]),
@@ -54,9 +52,21 @@ class AppController:
             ("longitude_proposta", "Longitude Proposta", ["", self.placeholder_lon]),
         ]
         
+        # Campos que são condicionais
+        campos_condicionais = [
+            ("cnpj", "CNPJ", [""]),
+            ("fistel", "Fistel", [""]),
+            ("endereco", "Endereço", [""]),
+            ("cep", "CEP", [""]),
+        ]
+
+        # Verifica o valor do checkbox
+        if data.get("incluir_enderecamento"):
+            campos_a_validar.extend(campos_condicionais)
+        
         campos_invalidos = []
         for key, nome_campo, valores_invalidos in campos_a_validar:
-            valor = data.get(key, "").strip()     
+            valor = data.get(key, "").strip() 
             if valor in valores_invalidos:
                 campos_invalidos.append(nome_campo)
         
@@ -88,12 +98,14 @@ class AppController:
 
 
     def _pdf_task(self, data: dict):
-        """O trabalho pesado (executado na thread)."""
+        """
+        Executa o fluxo completo: prepara dados, calcula promoção de classe, 
+        aplica correção IPCA e gera documentos (relatório PDF e ofício DOCX opcional)
+        """
         self.thread_result = None
         self.thread_error = None
         
         try:
-            # Prepara os dados
             dados_processados = {
                 "numero_processo": data["numero_processo"],
                 "servico": capitalizar_string(data["servico"]),
@@ -121,10 +133,23 @@ class AppController:
             ipca_value, ipca_date = ipca_calculation(resultado_calculo_promocao['vpc'], config.PATH_IPCA_JSON)
             resultado_calculo_promocao['ipca'] = ipca_value
             resultado_calculo_promocao['data_ipca'] = ipca_date
+            
+            # Adicionamos o estado do checkbox aos resultados.
+            resultado_calculo_promocao['incluir_enderecamento'] = data['incluir_enderecamento']
+            if data['incluir_enderecamento']:
+                resultado_calculo_promocao["cnpj"] = data['cnpj']
+                resultado_calculo_promocao['fistel'] = data['fistel']
+                resultado_calculo_promocao['endereco'] = data['endereco']
+                resultado_calculo_promocao['cep'] = data['cep']
+
 
             numero_processo_tratado = data["numero_processo"].replace('/', '-').replace('.', '_')
-            caminho_arquivo_pdf = os.path.join(output_directory, f"relatorio_{numero_processo_tratado}.pdf")
-            create_pdf(config.PATH_UF_JSON, caminho_arquivo_pdf, resultado_calculo_promocao)
+            caminho_arquivo_relatorio = os.path.join(output_directory, f"relatorio_{numero_processo_tratado}.pdf")
+            create_relatorio(config.PATH_UF_JSON, caminho_arquivo_relatorio, resultado_calculo_promocao)
+
+            if data['incluir_enderecamento']:
+                caminho_arquivo_oficio_editavel = os.path.join(output_directory, f"oficio_{numero_processo_tratado}.docx")
+                create_word_doc(caminho_arquivo_oficio_editavel, resultado_calculo_promocao)
 
             self.thread_result = "Relatório gerado com sucesso!"
 

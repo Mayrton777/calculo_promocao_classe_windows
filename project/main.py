@@ -19,7 +19,5 @@ if __name__ == "__main__":
     )
 
     controller = AppController(view)
-
     view.set_controller(controller)
-
     view.mainloop()

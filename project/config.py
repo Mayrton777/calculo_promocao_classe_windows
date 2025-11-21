@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-# --- LÓGICA DE CAMINHO (PROJECT_ROOT) ---
+# --- LÓGICA DE CAMINHO ---
 try:
     # Modo PyInstaller
     PROJECT_ROOT = Path(sys._MEIPASS)

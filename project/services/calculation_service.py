@@ -2,6 +2,7 @@ import geopandas as gpd
 import json
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import numpy as np
 import os
 from pathlib import Path
@@ -10,9 +11,112 @@ import re
 import shapely.geometry
 import tempfile
 
+from .utils import dms_for_decimal
+
 matplotlib.use('Agg')
 
 class CalculationService:
+    dmax_values = {
+            'e': [(range(0, 14), 65.6), (range(14, 47), 58.0), (range(47, 100), 58.0)],
+            'especial': [(range(0, 14), 65.6), (range(14, 47), 58.0), (range(47, 100), 58.0)],
+            'a': [(range(0, 14), 47.9), (range(14, 100), 42.5)],
+            'b': [(range(0, 14), 32.3), (range(14, 100), 29.1)],
+            'c': [(range(0, 14), 20.2), (range(14, 52), 18.1), (range(52, 100), 7.5)],
+            'e1': 78.5, 'e2': 67.5, 'e3': 54.5, 'a1': 38.5, 'a2': 35.0, 'a3': 30.0,
+            'a4': 24.0, 'b1': 16.5, 'b2': 12.5
+        }
+    
+    promotion_period = {
+            'C': {'B2': 0, 'B1': 0, 'A4': 2, 'A3': 2, 'A2': 6, 'A1': 6, 'E3': 8, 'E2': 10, 'E1': 12},
+            'B2': {'B1': 0, 'A4': 0, 'A3': 2, 'A2': 4, 'A1': 4, 'E3': 6, 'E2': 8, 'E1': 10},
+            'B1': {'A4': 0, 'A3': 0, 'A2': 2, 'A1': 2, 'E3': 4, 'E2': 6, 'E1': 8},
+            'A4': {'A3': 0, 'A2': 0, 'A1': 2, 'E3': 4, 'E2': 6, 'E1': 8},
+            'A3': {'A2': 0, 'A1': 0, 'E3': 2, 'E2': 4, 'E1': 6},
+            'A2': {'A1': 0, 'E3': 2, 'E2': 4, 'E1': 6},
+            'A1': {'E3': 0, 'E2': 2, 'E1': 4},
+            'E3': {'E2': 0, 'E1': 2},
+            'E2': {'E1': 0}
+        }
+
+    referencias = {
+        'B': {
+            'SC': ['4209102', 'Joinville', 363499.72],
+            'AC': ['1200401', 'Rio Branco', 32586.82],
+            'AL': ['2704302', 'Maceió', 144040.28],
+            'AP': ['1600303', 'Macapá', 60014.83],
+            'BA': ['2927408', 'Salvador', 169291.50],
+            'AM': ['1302603', 'Manaus', 78099.69],
+            'MA': ['2111300', 'São Luís', 144005.30],
+            'PA': ['1501402', 'Belém', 85097.28],
+            'SP': {
+                'padrao': ['3509502', 'Campinas', 249622.55],
+                'especifico': ['3503901', '3505708', '3506607', '3509007', '3509205', '3510609', 
+                            '3513009', '3513801', '3515004', '3515103', '3515707', '3516309',
+                            '3516408', '3518305', '3518800', '3522208', '3522505', '3523107',
+                            '3525003', '3526209', '3528502', '3529401', '3530607', '3534401',
+                            '3539103', '3539806', '3543303', '3544103', '3545001', '3546801',
+                            '3547304', '3547809', '3548708', '3548807', '3549953', '3550308',
+                            '3552502', '3552809', '3556453']
+            },
+            'CE': ['2304400', 'Fortaleza', 166419.21],
+            'GO': ['5208707', 'Goiânia', 235323.01],
+            'SE': ['2800308', 'Aracajú', 141640.89],
+            'MG': ['3106200', 'Belo Horizonte', 53718.66],
+            'PB': ['2507507', 'João Pessoa', 144582.39],
+            'MT': ['5103403', 'Cuiabá', 164843.20],
+            'MS': ['5002704', 'Campo Grande', 215788.29],
+            'DF': ['5300108', 'Brasília', 307127.24],
+            'RO': ['1100205', 'Porto Velho', 45590.69],
+            'RJ': ['3304557', 'Rio de Janeiro', 701663.27],
+            'PE': ['2611606', 'Recife', 157833.60],
+            'PR': ['4106902', 'Curitiba', 469494.06],
+            'PI': ['2211001', 'Teresina', 144681.50],
+            'RN': ['2408102', 'Natal', 145172.62],
+            'RR': ['1400100', 'Boa Vista', 27459.32],
+            'RS': ['4314902', 'Porto Alegre', 425475.87],
+            'ES': ['3205200', 'Vila Velha', 69587.43],
+            'TO': ['1721000', 'Palmas', 15473.83]
+        },
+        'C': {
+            'SC': ['4209102', 'Joinville', 852817.55],
+            'AC': ['1200401', 'Rio Branco', 77202.31],
+            'AL': ['2704302', 'Maceió', 337505.73],
+            'AP': ['1600303', 'Macapá', 111663.65],
+            'BA': ['2927408', 'Salvador', 397584.59],
+            'AM': ['1302603', 'Manaus', 183187.51],
+            'MA': ['2111300', 'São Luís', 338625.89],
+            'PA': ['1501402', 'Belém', 199600.76],
+            'SP': {
+                'padrao': ['3509502', 'Campinas', 585504.63],
+                'especifico': ['3503901', '3505708', '3506607', '3509007', '3509205', '3510609', 
+                            '3513009', '3513801', '3515004', '3515103', '3515707', '3516309',
+                            '3516408', '3518305', '3518800', '3522208', '3522505', '3523107',
+                            '3525003', '3526209', '3528502', '3529401', '3530607', '3534401',
+                            '3539103', '3539806', '3543303', '3544103', '3545001', '3546801',
+                            '3547304', '3547809', '3548708', '3548807', '3549953', '3550308',
+                            '3552502', '3552809', '3556453']
+            },
+            'CE': ['2304400', 'Fortaleza', 391262.94],
+            'GO': ['5208707', 'Goiânia', 551639.11],
+            'SE': ['2800308', 'Aracajú', 332431.61],
+            'MG': ['3106200', 'Belo Horizonte', 125672.29],
+            'PB': ['2507507', 'João Pessoa', 338855.67],
+            'MT': ['5103403', 'Cuiabá', 387763.39],
+            'MS': ['5002704', 'Campo Grande', 505001.04],
+            'DF': ['5300108', 'Brasília', 720385.32],
+            'RO': ['1100205', 'Porto Velho', 105637.44],
+            'RJ': ['3304557', 'Rio de Janeiro', 1629200.59],
+            'PE': ['2611606', 'Recife', 369776.49],
+            'PR': ['4106902', 'Curitiba', 1098420.32],
+            'PI': ['2211001', 'Teresina', 339511.65],
+            'RN': ['2408102', 'Natal', 340511.07],
+            'RR': ['1400100', 'Boa Vista', 64624.06],
+            'RS': ['4314902', 'Porto Alegre', 995714.32],
+            'ES': ['3205200', 'Vila Velha', 79940.86],
+            'TO': ['1721000', 'Palmas', 36039.46]
+        }
+    }
+    
     def __init__(self, path_census_sectors: Path, path_uf: Path, data: dict):
         self.path_census_sectors = path_census_sectors
         
@@ -46,18 +150,8 @@ class CalculationService:
         self.current_name_state = self.uf_names.get(self.current_state)
         self.proposed_name_state = self.uf_names.get(self.proposed_state)
 
-        self.dmax_values = {
-            'e': [(range(0, 14), 65.6), (range(14, 47), 58.0), (range(47, 100), 58.0)],
-            'especial': [(range(0, 14), 65.6), (range(14, 47), 58.0), (range(47, 100), 58.0)],
-            'a': [(range(0, 14), 47.9), (range(14, 100), 42.5)],
-            'b': [(range(0, 14), 32.3), (range(14, 100), 29.1)],
-            'c': [(range(0, 14), 20.2), (range(14, 52), 18.1), (range(52, 100), 7.5)],
-            'e1': 78.5, 'e2': 67.5, 'e3': 54.5, 'a1': 38.5, 'a2': 35.0, 'a3': 30.0,
-            'a4': 24.0, 'b1': 16.5, 'b2': 12.5
-        }
-
-        self.proposed_latitude_decimal = self.dms_for_decimal(self.proposed_latitude)
-        self.proposed_longitude_decimal = self.dms_for_decimal(self.proposed_longitude)
+        self.proposed_latitude_decimal = dms_for_decimal(self.proposed_latitude)
+        self.proposed_longitude_decimal = dms_for_decimal(self.proposed_longitude)
         self.dmax_contour = str(self.dmax_cp(self.proposed_class, self.proposed_channel))
 
         # Geodataframe do contorno protegido circular da classe proposta do canal
@@ -79,157 +173,32 @@ class CalculationService:
         # DataFrame
         self.df = pd.DataFrame(self.gdf_census_municipalities)
 
-        # Valida e obtém o código do município ATUAL
-        self.current_municipality_code = self._get_municipality_code(
-            self.current_municipality,
-            self.current_name_state,
-            "Atual"
-        )
-        
-        # Valida e obtém o código do município PROPOSTO
-        self.proposed_municipality_code = self._get_municipality_code(
-            self.proposed_municipality, 
-            self.proposed_name_state, 
-            "Proposto"
-        )
-
-        self.promotion_period = {
-            'C': {'B2': 0, 'B1': 0, 'A4': 2, 'A3': 2, 'A2': 6, 'A1': 6, 'E3': 8, 'E2': 10, 'E1': 12},
-            'B2': {'B1': 0, 'A4': 0, 'A3': 2, 'A2': 4, 'A1': 4, 'E3': 6, 'E2': 8, 'E1': 10},
-            'B1': {'A4': 0, 'A3': 0, 'A2': 2, 'A1': 2, 'E3': 4, 'E2': 6, 'E1': 8},
-            'A4': {'A3': 0, 'A2': 0, 'A1': 2, 'E3': 4, 'E2': 6, 'E1': 8},
-            'A3': {'A2': 0, 'A1': 0, 'E3': 2, 'E2': 4, 'E1': 6},
-            'A2': {'A1': 0, 'E3': 2, 'E2': 4, 'E1': 6},
-            'A1': {'E3': 0, 'E2': 2, 'E1': 4},
-            'E3': {'E2': 0, 'E1': 2},
-            'E2': {'E1': 0}
-        }
-
-        self.referencias = {
-            'B': {
-                'SC': ['4209102', 'Joinville', 363499.72],
-                'AC': ['1200401', 'Rio Branco', 32586.82],
-                'AL': ['2704302', 'Maceió', 144040.28],
-                'AP': ['1600303', 'Macapá', 60014.83],
-                'BA': ['2927408', 'Salvador', 169291.50],
-                'AM': ['1302603', 'Manaus', 78099.69],
-                'MA': ['2111300', 'São Luís', 144005.30],
-                'PA': ['1501402', 'Belém', 85097.28],
-                'SP': {
-                    'padrao': ['3509502', 'Campinas', 249622.55],
-                    'especifico': ['3503901', '3505708', '3506607', '3509007', '3509205', '3510609', 
-                                '3513009', '3513801', '3515004', '3515103', '3515707', '3516309',
-                                '3516408', '3518305', '3518800', '3522208', '3522505', '3523107',
-                                '3525003', '3526209', '3528502', '3529401', '3530607', '3534401',
-                                '3539103', '3539806', '3543303', '3544103', '3545001', '3546801',
-                                '3547304', '3547809', '3548708', '3548807', '3549953', '3550308',
-                                '3552502', '3552809', '3556453']
-                },
-                'CE': ['2304400', 'Fortaleza', 166419.21],
-                'GO': ['5208707', 'Goiânia', 235323.01],
-                'SE': ['2800308', 'Aracajú', 141640.89],
-                'MG': ['3106200', 'Belo Horizonte', 53718.66],
-                'PB': ['2507507', 'João Pessoa', 144582.39],
-                'MT': ['5103403', 'Cuiabá', 164843.20],
-                'MS': ['5002704', 'Campo Grande', 215788.29],
-                'DF': ['5300108', 'Brasília', 307127.24],
-                'RO': ['1100205', 'Porto Velho', 45590.69],
-                'RJ': ['3304557', 'Rio de Janeiro', 701663.27],
-                'PE': ['2611606', 'Recife', 157833.60],
-                'PR': ['4106902', 'Curitiba', 469494.06],
-                'PI': ['2211001', 'Teresina', 144681.50],
-                'RN': ['2408102', 'Natal', 145172.62],
-                'RR': ['1400100', 'Boa Vista', 27459.32],
-                'RS': ['4314902', 'Porto Alegre', 425475.87],
-                'ES': ['3205200', 'Vila Velha', 69587.43],
-                'TO': ['1721000', 'Palmas', 15473.83]
-            },
-            'C': {
-                'SC': ['4209102', 'Joinville', 852817.55],
-                'AC': ['1200401', 'Rio Branco', 77202.31],
-                'AL': ['2704302', 'Maceió', 337505.73],
-                'AP': ['1600303', 'Macapá', 111663.65],
-                'BA': ['2927408', 'Salvador', 397584.59],
-                'AM': ['1302603', 'Manaus', 183187.51],
-                'MA': ['2111300', 'São Luís', 338625.89],
-                'PA': ['1501402', 'Belém', 199600.76],
-                'SP': {
-                    'padrao': ['3509502', 'Campinas', 585504.63],
-                    'especifico': ['3503901', '3505708', '3506607', '3509007', '3509205', '3510609', 
-                                '3513009', '3513801', '3515004', '3515103', '3515707', '3516309',
-                                '3516408', '3518305', '3518800', '3522208', '3522505', '3523107',
-                                '3525003', '3526209', '3528502', '3529401', '3530607', '3534401',
-                                '3539103', '3539806', '3543303', '3544103', '3545001', '3546801',
-                                '3547304', '3547809', '3548708', '3548807', '3549953', '3550308',
-                                '3552502', '3552809', '3556453']
-                },
-                'CE': ['2304400', 'Fortaleza', 391262.94],
-                'GO': ['5208707', 'Goiânia', 551639.11],
-                'SE': ['2800308', 'Aracajú', 332431.61],
-                'MG': ['3106200', 'Belo Horizonte', 125672.29],
-                'PB': ['2507507', 'João Pessoa', 338855.67],
-                'MT': ['5103403', 'Cuiabá', 387763.39],
-                'MS': ['5002704', 'Campo Grande', 505001.04],
-                'DF': ['5300108', 'Brasília', 720385.32],
-                'RO': ['1100205', 'Porto Velho', 105637.44],
-                'RJ': ['3304557', 'Rio de Janeiro', 1629200.59],
-                'PE': ['2611606', 'Recife', 369776.49],
-                'PR': ['4106902', 'Curitiba', 1098420.32],
-                'PI': ['2211001', 'Teresina', 339511.65],
-                'RN': ['2408102', 'Natal', 340511.07],
-                'RR': ['1400100', 'Boa Vista', 64624.06],
-                'RS': ['4314902', 'Porto Alegre', 995714.32],
-                'ES': ['3205200', 'Vila Velha', 79940.86],
-                'TO': ['1721000', 'Palmas', 36039.46]
-            }
-        }
     
     def _get_municipality_code(self, mun_name: str, state_name: str, mun_type: str) -> str:
         """
         Verifica um município no DataFrame e retorna seu código ('CD_MUN').
         Levanta um MunicipalityNotFoundError se não for encontrado.
-        
-        Args:
-            mun_name: Nome do município (ex: "Rio Branco")
-            state_name: Nome do estado (ex: "Acre")
-            mun_type: String para a mensagem de erro (ex: "Atual" ou "Proposto")
         """
+
         # Filtra o DataFrame para encontrar o município
         matched_municipality = self.df[
             (self.df['NM_MUN'] == mun_name) & 
             (self.df['NM_UF'] == state_name)
         ]
 
-        # Captura o código do município
         if not matched_municipality.empty:
-            # Retorna o código do primeiro resultado encontrado
             return matched_municipality['CD_MUN'].iloc[0]
         else:
-            # Levanta o erro com uma mensagem clara
             raise ValueError(
                 f"Município {mun_type} '{mun_name}' em '{state_name}' não foi encontrado. "
                 "Verifique a ortografia e se a UF está correta."
             )
     
 
-    def municipality_state(self, number_municipality, state):
+    def _municipality_state(self, number_municipality, state):
         return f'{number_municipality} - {state}'
-    
-    def dms_for_decimal(self, dms):
-        dms = dms.upper().strip().replace(' ', '').replace("’", "'").replace('”', '"').replace("''", '"').replace(',', '.')
-        direction = re.findall(r'[A-Z]', dms)
-        dms = re.sub(r'[A-Z]', '', dms)
-        degree = float(dms.split('°')[0])
-        minute = float(dms.split('°')[1].split("'")[0])
-        second = float(dms.split('°')[1].split("'")[1].split('"')[0])
-        decimal = degree + minute/60 + second/3600
 
-        if 'S' in direction or 'W' in direction:
-            decimal = -decimal
-
-        return decimal
-
-    def get_reference_value(self, state, classification, city_code):
+    def _get_reference_value(self, state, classification, city_code):
         if classification in self.referencias and state in self.referencias[classification]:
             if state == 'SP':
                 if city_code in self.referencias[classification][state]['especifico']:
@@ -238,7 +207,7 @@ class CalculationService:
             return self.referencias[classification][state]
         return 'Referência não encontrada'
     
-    def class_group(self, classe):
+    def _class_group(self, classe):
         grupos = {
             'A': ['B1', 'B2', 'C'],
             'B': ['A', 'A1', 'A2', 'A3', 'A4', 'B'],
@@ -249,7 +218,7 @@ class CalculationService:
                 return grupo
         return 'classe inexistente'
     
-    def check_class_change(self, current_class, proposed_class):
+    def _check_class_change(self, current_class, proposed_class):
         classes = ['C', 'B2', 'B1', 'A4', 'A3', 'A2', 'A1', 'E3', 'E2', 'E1']
         if current_class in classes and proposed_class in classes:
             if classes.index(current_class) == classes.index(proposed_class):
@@ -264,15 +233,15 @@ class CalculationService:
         else:
             return 'classe inexistente'
 
-    def tcp(self, current_class, proposed_class):
-        if self.check_class_change(current_class, proposed_class) != "promoção de classe":
+    def _time_to_target_class(self, current_class, proposed_class):
+        if self._check_class_change(current_class, proposed_class) != "promoção de classe":
             return "não se aplica"
 
         return self.promotion_period.get(current_class, {}).get(proposed_class, "não se aplica")
     
     def check_change_type(self, current_class, proposed_class):
-        if self.check_class_change(current_class, proposed_class) == "promoção de classe":
-            return "gradual" if self.tcp(current_class, proposed_class) == 0 else "não gradual"
+        if self._check_class_change(current_class, proposed_class) == "promoção de classe":
+            return "gradual" if self._time_to_target_class(current_class, proposed_class) == 0 else "não gradual"
         return "não se aplica"
     
     def check_group_change(self, current_class, proposed_class):
@@ -280,8 +249,8 @@ class CalculationService:
         grupos = ['A', 'B', 'C']
 
         if current_class in classes and proposed_class in classes:
-            current_group = self.class_group(current_class)
-            proposed_group = self.class_group(proposed_class)
+            current_group = self._class_group(current_class)
+            proposed_group = self._class_group(proposed_class)
             if current_group == proposed_group:
                 return f"sem mudança de grupo - {current_group}"
             elif grupos.index(current_group) < grupos.index(proposed_group):
@@ -297,7 +266,7 @@ class CalculationService:
         elif "promoção de grupo" in change:
             return "com cobrança"
         elif "sem mudança de grupo" in change:
-            return "sem cobrança" if self.tcp(current_class, proposed_class) in [0, "não se aplica"] else "com cobrança"
+            return "sem cobrança" if self._time_to_target_class(current_class, proposed_class) in [0, "não se aplica"] else "com cobrança"
         else:
             return "não se aplica"
 
@@ -318,7 +287,7 @@ class CalculationService:
         Retorna a população total de um município a partir de seu código.
         """
         # Filtra o GeoDataFrame para incluir apenas os setores censitários do município com o código fornecido.
-        municipality_sectors = self.gdf_municipalities[self.gdf_municipalities.CD_MUN == code]
+        municipality_sectors = self.gdf_census_municipalities[self.gdf_census_municipalities.CD_MUN == code]
 
         # Soma a população de todos os setores do município.
         total_municipality_population = municipality_sectors['v0001'].sum()
@@ -344,17 +313,16 @@ class CalculationService:
 
     # Cálculo de dados intermediários
     def data_process(self, current_class, proposed_class, current_latitude, current_longitude, proposed_sit_state, proposed_sit_city_code):
+        self.current_group = self._class_group(current_class)
+        self.proposed_group = self._class_group(proposed_class)
         
-        self.current_group = self.class_group(current_class)
-        self.proposed_group = self.class_group(proposed_class)
-        
-        self.current_latitude_decimal = self.dms_for_decimal(current_latitude)
-        self.current_longitude_decimal = self.dms_for_decimal(current_longitude)
-        self.tcp_value = self.tcp(current_class, proposed_class)
-        self.reference_city_code = self.get_reference_value(
+        self.current_latitude_decimal = dms_for_decimal(current_latitude)
+        self.current_longitude_decimal = dms_for_decimal(current_longitude)
+        self.tcp_value = self._time_to_target_class(current_class, proposed_class)
+        self.reference_city_code = self._get_reference_value(
             proposed_sit_state, self.proposed_group, proposed_sit_city_code
         )[0]
-        self.reference_city = self.get_reference_value(
+        self.reference_city = self._get_reference_value(
             proposed_sit_state, self.proposed_group, proposed_sit_city_code
         )[1]
         self.change_type = self.check_change_type(current_class, proposed_class)
@@ -364,19 +332,19 @@ class CalculationService:
         station_coordinates = shapely.geometry.Point(self.proposed_longitude_decimal, self.proposed_latitude_decimal)
         self.gdf_station = gpd.GeoDataFrame(geometry=[station_coordinates], crs='EPSG:4674')
 
-
         self.teste = self.gdf_census_municipalities.dissolve(by='CD_MUN', aggfunc={'NM_MUN': 'first', 'NM_UF': 'first', 'v0001': 'sum'})
         self.teste_mun = gpd.sjoin(self.teste, self.gdf_protected_contour, predicate='intersects')
-
+        
         codigos_dos_municipios = self.teste_mun.index.unique()
 
-        self.setor_teste = self.gdf_census_municipalities[self.gdf_census_municipalities['CD_MUN'].isin(codigos_dos_municipios)].copy()
-
+        self.setor_teste = self.gdf_census_municipalities[
+            self.gdf_census_municipalities['CD_MUN'].isin(codigos_dos_municipios)
+        ].copy()
 
         filtro_urbano_setor_teste = (self.setor_teste['SITUACAO'] == 'Urbana') & (self.setor_teste['NM_NU'].isnull()) & (self.setor_teste['NM_MUN'] == self.setor_teste['NM_DIST'])
         
         self.setores_urbanos_teste = self.setor_teste[filtro_urbano_setor_teste].reset_index(drop=True)
-        
+
         # Municípios que fazem interseção com o contorno protegido da classe do canal
         self.gdf_municipalities = gpd.sjoin(self.gdf_census_municipalities, self.gdf_protected_contour, predicate='intersects')
         self.gdf_municipalities = self.gdf_municipalities.drop('index_right', axis=1)
@@ -391,8 +359,8 @@ class CalculationService:
         gdf_census_sectors = gpd.read_file(self.path_census_sectors, mask=gdf_united_municipalities)
 
         # Setores censitários urbanos
+        # Corrigir o contorno urbano pois nem todo o contorno esta sedo pintado de vermelho
         urban_census_sectors_filter = (gdf_census_sectors.SITUACAO == 'Urbana') & (gdf_census_sectors.NM_NU.isnull()) & (gdf_census_sectors.NM_MUN == gdf_census_sectors.NM_DIST)
-
         self.gdf_urban_census_sectors = gdf_census_sectors[urban_census_sectors_filter].reset_index(drop=True)
 
         # Geodataframe da interseção entre os setores censitários urbanos e o contorno protegido
@@ -400,37 +368,23 @@ class CalculationService:
         self.gdf_urban_sectors_cp_intersection = self.gdf_urban_sectors_cp_intersection.reset_index(drop=True)
 
         # Geodataframe dos municípios cujas áreas urbanas são intersectadas pelo contorno protegido
-        
-        # 1. Obter os códigos únicos dos municípios onde a ÁREA URBANA intersecta o contorno
-        # (Isso já estava correto)
         self.covered_municipalities_codes = list(self.gdf_urban_sectors_cp_intersection.CD_MUN.unique())
-
-        # 2. Filtrar o GeoDataFrame de MUNICÍPIOS COMPLETOS (self.teste) usando esses códigos.
         #    O self.teste está indexado por 'CD_MUN' (do dissolve), por isso usamos .index.isin()
         self.gdf_municipalities_with_urban_area_reached = self.teste[self.teste.index.isin(self.covered_municipalities_codes)]
-
-        # 3. Resetar o índice para que 'CD_MUN' volte a ser uma coluna
-        #    (Não use drop=True, pois você quer manter o CD_MUN)
         self.gdf_municipalities_with_urban_area_reached = self.gdf_municipalities_with_urban_area_reached.reset_index()
-
-        # 4. Criar a coluna 'MUNICIPIO-UF'
-        #    (Isto agora funciona pois 'NM_UF' foi adicionado ao aggfunc do dissolve na Etapa 1)
-        self.gdf_municipalities_with_urban_area_reached['MUNICIPIO-UF'] = np.vectorize(self.municipality_state)(
+        self.gdf_municipalities_with_urban_area_reached['MUNICIPIO-UF'] = np.vectorize(self._municipality_state)(
             self.gdf_municipalities_with_urban_area_reached['NM_MUN'], self.gdf_municipalities_with_urban_area_reached['NM_UF'])
-
+        
         covered_municipalities = []
         for code in self.covered_municipalities_codes:
-            covered_municipalities.append(self.get_municipality_with_code(code)) 
+            covered_municipalities.append(self.get_municipality_with_code(code))
     
-
     def creat_map(self):
         fig, ax = plt.subplots(1,1,figsize=(12,10))
 
-        # Municípios atingidos pelo contorno protegido
-        #self.setor_teste.plot(ax=ax, color='None', edgecolor='black', linewidth=0.5)
         self.teste_mun.plot(ax=ax, color='None', edgecolor='black', linewidth=2)
+
         self.setores_urbanos_teste.plot(ax=ax, color='None', edgecolor='orange', linewidth=0.5)
-        #self.gdf_municipalities.plot(ax=ax, color='None', edgecolor='black', linewidth=0.5)
         
         # Municípios com áreas urbanas atingidas pelo contorno protegido
         self.gdf_municipalities_with_urban_area_reached.plot(ax=ax, column='MUNICIPIO-UF', categorical=True, edgecolor='black', cmap='turbo', linewidth=0.1, alpha = 0.7, legend=False)
@@ -440,14 +394,12 @@ class CalculationService:
 
         # Estação na situação proposta
         self.gdf_station.plot(ax=ax, color='yellow', edgecolor='black', linewidth=1.5)
-        
+       
         # Circunferência do contorno protegido teórico
         self.gdf_protected_contour.plot(ax = ax, color='none', edgecolor='red', linewidth=1.5, linestyle='dashed')
 
-        # Mapa
         plt.title('Municípios com áreas urbanas atingidas pelo contorno protegido da classe proposta', fontsize=13, y=1.01)
         
-        # Pega o diretório temporário do sistema
         temp_dir = tempfile.gettempdir()
 
         imagem_name = self.process_number.replace('/', '-').replace('.', '_')
@@ -457,7 +409,6 @@ class CalculationService:
         plt.savefig(caminho_salvar_mapa_temp)
         plt.close(fig)
 
-        # Retorna o caminho onde o mapa foi salvo
         return caminho_salvar_mapa_temp
 
     def calculo_promocao_classe(self, population):
@@ -479,18 +430,17 @@ class CalculationService:
         # # População dos municípios cobertos
         self.Ptot = sum(num_population)
         
-        # Soma todos os v0001 do município de referência
         self.Pref = int(df_populacao[filtro_mun_ref]['v0001'].sum())
 
         if self.current_group == 'A':
             if self.proposed_group == 'A':
                 self.Vab, self.Vbc = 0, 0
             elif self.proposed_group == 'B':
-                self.Vab = self.get_reference_value(self.proposed_state, self.proposed_group, self.reference_city_code)[2]
+                self.Vab = self._get_reference_value(self.proposed_state, self.proposed_group, self.reference_city_code)[2]
                 self.Vbc = 0
             elif self.proposed_group == 'C':
-                self.Vab = self.get_reference_value(self.proposed_state, 'B', self.reference_city_code)[2]
-                self.Vbc = self.get_reference_value(self.proposed_state, self.proposed_group, self.reference_city_code)[2]
+                self.Vab = self._get_reference_value(self.proposed_state, 'B', self.reference_city_code)[2]
+                self.Vbc = self._get_reference_value(self.proposed_state, self.proposed_group, self.reference_city_code)[2]
         elif self.current_group == 'B':
             if self.proposed_group == 'A':
                 self.Vab, self.Vbc = 0, 0
@@ -498,11 +448,11 @@ class CalculationService:
                 if self.tcp_value == 0:
                     self.Vab, self.Vbc = 0, 0
                 else:
-                    self.Vab = self.get_reference_value(self.proposed_state, 'B', self.reference_city_code)[2]
+                    self.Vab = self._get_reference_value(self.proposed_state, 'B', self.reference_city_code)[2]
                     self.Vbc = 0
             elif self.proposed_group == 'C':
                 self.Vab = 0
-                self.Vbc = self.get_reference_value(self.proposed_state, self.proposed_group, self.reference_city_code)[2]
+                self.Vbc = self._get_reference_value(self.proposed_state, self.proposed_group, self.reference_city_code)[2]
         elif self.current_group == 'C':
             if self.proposed_group == 'A':
                 self.Vab, self.Vbc = 0, 0
@@ -513,7 +463,7 @@ class CalculationService:
                     self.Vab, self.Vbc = 0, 0
                 else:
                     self.Vab = 0
-                    self.Vbc = self.get_reference_value(self.proposed_state, 'C', self.reference_city_code)[2] 
+                    self.Vbc = self._get_reference_value(self.proposed_state, 'C', self.reference_city_code)[2] 
                     
         if self.tcp_value != 'não se aplica':
             self.Vpc = (self.Ptot/self.Pref) * (self.Vab + self.Vbc) * (1+int(self.tcp_value)/10)
@@ -523,18 +473,24 @@ class CalculationService:
             self.Vpc = 'não se aplica'
     
     def get_results(self):
+        # Valida e obtém o código do município ATUAL
+        current_municipality_code = self._get_municipality_code(
+            self.current_municipality,
+            self.current_name_state,
+            "Atual"
+        )
         
+        # Valida e obtém o código do município PROPOSTO
+        proposed_municipality_code = self._get_municipality_code(
+            self.proposed_municipality, 
+            self.proposed_name_state, 
+            "Proposto"
+        )
+
         # Chame os métodos de processamento de dados e geoprocessamento
-        self.data_process(self.current_class, self.proposed_class, self.current_latitude, self.current_longitude, self.proposed_state, self.proposed_municipality_code)
+        self.data_process(self.current_class, self.proposed_class, self.current_latitude, self.current_longitude, self.proposed_state, proposed_municipality_code)
         
         self.geo_process()
-        
-        # Obtenha os dados calculados para impressão
-        proposed_class = self.proposed_class
-        dmax_contorno = self.dmax_contour
-        municipio_proposto = self.proposed_municipality
-        uf_proposta = self.proposed_state
-        grupo_proposto = self.proposed_group
         
         covered_municipalities = []
         for code in self.covered_municipalities_codes:
@@ -543,31 +499,6 @@ class CalculationService:
         self.calculo_promocao_classe(covered_municipalities)
         
         caminho_mapa_temporario = self.creat_map()
-    
-        Tcp = self.tcp_value
-        Ptot = self.Ptot
-        municipio_referencia = self.reference_city
-        Vab = self.Vab
-        Vbc = self.Vbc
-        Pref = self.Pref
-        Vpc = self.Vpc
-        
-        # # Imprima os resultados
-        # print(f"Classe proposta: {proposed_class}\n")
-        # print(f"Distância máxima ao contorno protegido: dmax = {dmax_contorno} km\n")
-        # print(f"Município e UF da estação: {municipio_proposto}/{uf_proposta}\n")
-        # print(f"Grupo de enquadramento proposto: {grupo_proposto}\n")
-
-        # print(f'{len(covered_municipalities)} municípios com área urbana atingida pelo CP da classe: \n')
-
-        # for municipio in covered_municipalities:
-        #     print(municipio)
-        
-        # print(f'\nPopulação total dos municípios cobertos: Ptot = {Ptot:,.0f}\n'.replace(',','.'))
-        # print(f"Município de referência: {municipio_referencia}/{uf_proposta}\n")
-        # print(f"Valores de referência: Vab = R$ {Vab} e Vbc = R$ {Vbc}\n")
-        # print(f'População do município de referência: Pref = {Pref:,}\n'.replace(',','.'))
-        # print(f'Valor da promoção de classe: Vpc = R$ {Vpc}\n')
 
         result_list = {
             'numero_processo': self.process_number,
@@ -590,14 +521,14 @@ class CalculationService:
             'grupo_atual': self.current_group,
             'grupo_proposto': self.proposed_group,
             'municipios_afetados': covered_municipalities,
-            'tcp': Tcp,
-            'dmax': dmax_contorno,
-            'municipio_referencia': municipio_referencia,
-            'pref': Pref,
-            'valor_ab': Vab,
-            'valor_bc': Vbc,
-            'ptot': Ptot,
-            'vpc': Vpc,
+            'tcp': self.tcp_value,
+            'dmax': self.dmax_contour,
+            'municipio_referencia': self.reference_city,
+            'pref': self.Pref,
+            'valor_ab': self.Vab,
+            'valor_bc': self.Vbc,
+            'ptot': self.Ptot,
+            'vpc': self.Vpc,
             'caminho_mapa_temp': caminho_mapa_temporario
         }
 
