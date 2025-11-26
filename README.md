@@ -13,7 +13,7 @@ Siga os passos abaixo para clonar o repositório e executar a aplicação em seu
 Use o Git para baixar o projeto para sua máquina local.
 
 ```bash
-git clone [https://github.com/Mayrton777/calculo_promocao_classe_windows.git](https://github.com/Mayrton777/calculo_promocao_classe_windows.git)
+git clone https://github.com/Mayrton777/calculo_promocao_classe_windows.git
 cd calculo_promocao_classe_windows/project
 ```
 
@@ -90,3 +90,5 @@ project/
 ### Mayrton Eduardo
 * **contato**: mayrtontrabaho@gmail.com
 ### Victor Lima
+
+* **contato**: vlsantos1103@gmail.com
