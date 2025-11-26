@@ -1,6 +1,6 @@
 import requests
 import pandas as pd
-import json  # <-- Adicionada a importação
+import json
 
 def ipca_calculation(valor_original: float, static_ipca_path: str) -> tuple | None:
     """

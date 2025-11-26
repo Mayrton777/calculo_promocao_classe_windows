@@ -1,5 +1,5 @@
 from .calculation_service import CalculationService
-from .creat_pdf_oficio import create_word_doc
+from .create_pdf_oficio import create_word_doc
 from .create_pdf import create_relatorio
 from .ipca import ipca_calculation
 from .utils import capitalizar_string, dms_for_decimal

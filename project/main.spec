@@ -2,7 +2,7 @@
 import os
 import sys
 
-# Encontra o diretório do seu ambiente virtual (env)
+# Encontra o diretório do ambiente virtual
 SPEC_DIR = SPECPATH
 SITE_PACKAGES_DIR = os.path.join(SPEC_DIR, 'env', 'Lib', 'site-packages')
 
