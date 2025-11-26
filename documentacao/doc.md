@@ -354,3 +354,278 @@ O construtor da classe recebe os caminhos para os arquivos geoespaciais e o dici
 | | 5. Chama `creat_map()` (gera o mapa). |
 | | 6. Retorna o dicionário completo de resultados, incluindo todos os valores de entrada e os valores calculados ($V_{pc}, P_{tot}, T_{cp}, D_{max}$, etc.). |
 
+### Documentação do Código: `create_pdf.py`
+
+O arquivo `create_pdf.py` é responsável pela **geração do Relatório Técnico** do cálculo de promoção de classe, no formato **PDF**, utilizando a biblioteca `reportlab`. Este módulo foca na apresentação visual dos resultados, fórmulas e dados de geoprocessamento.
+
+#### Configuração de Ambiente
+
+Antes da função principal, o script tenta configurar o *locale* para o formato brasileiro (`pt_BR`).
+
+  * **`locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')`**: Tenta definir a formatação regional para números e moeda no padrão brasileiro. Isso garante que valores como `R$ 1.000,00` e números grandes (`1.000.000`) sejam formatados corretamente dentro do PDF.
+
+#### Função Principal: `create_relatorio()`
+
+Esta é a única função pública do módulo e orquestra a criação de todo o documento.
+
+| Parâmetro | Descrição |
+| :--- | :--- |
+| **`path_uf`** | Caminho para o arquivo JSON de estados/UFs (usado para converter nomes completos de estados em siglas, se necessário). |
+| **`file_path`** | Caminho completo onde o arquivo PDF final será salvo. |
+| **`data`** | Dicionário contendo todos os resultados do cálculo (`vpc`, `ipca`, `dmax`, `ptot`, `municípios_afetados`, `caminho_mapa_temp`, etc.). |
+
+#### Fluxo de Execução
+
+1.  **Formatação de Variáveis**: O script extrai os dados numéricos do dicionário (`vpc`, `ipca`, `dmax`, `pref`, etc.) e usa `locale.format_string()` para formatá-los no padrão brasileiro (separadores de milhar e decimal).
+2.  **Configuração de Documento**: Cria o objeto `SimpleDocTemplate` e inicializa o *story* (lista de elementos do PDF).
+3.  **Definição de Estilos**: Cria e configura diversos `ParagraphStyle`s (Títulos, Textos Normais, Subtítulos, etc.), definindo tamanho de fonte, alinhamento e espaçamento.
+4.  **Seções do PDF (Página 1)**:
+      * **Título**: Insere o título principal do documento.
+      * **Tabela de Processo**: Tabela com os dados básicos do processo (Número, Serviço, Entidade).
+      * **Tabela de Modificação**: Compara a **Situação Atual** e a **Situação Proposta** da estação (Município, Canal, Classe, Latitude, Longitude).
+      * **Seção 2 (Municípios)**: Introdução e texto explicativo sobre o Contorno Protegido e a Portaria GM/MCom nº 1/2023.
+5.  **Seções do PDF (Página 2)**:
+      * **Mapa (Figura 1)**: Insere a imagem do mapa (PNG) gerada pelo `CalculationService`.
+      * **Tabela de Municípios (Tabela 1)**: Lista todos os municípios cujas áreas urbanas foram atingidas pelo Contorno Protegido, juntamente com suas populações.
+      * **Seção 3 (Cálculo)**: Tabela com os **dados intermediários** para o cálculo ($T_{cp}$, $D_{max}$, $P_{ref}$, $V_{AB}$, $V_{BC}$).
+      * **Fórmulas**: Apresenta a **fórmula de $V_{pc}$** e a substituição dos valores.
+      * **IPCA**: Apresenta o parágrafo final sobre a correção monetária pelo IPCA, mencionando a data de correção e o **valor final a ser cobrado**.
+6.  **Geração e Limpeza**:
+      * Chama `doc.build(story)` para gerar o PDF.
+      * No bloco `finally`, tenta **remover o arquivo de mapa temporário** (`map_path`) criado pelo `CalculationService` para evitar o acúmulo de arquivos.
+
+### Documentação do Código: `creat_pdf_oficio.py`
+
+O arquivo `creat_pdf_oficio.py` contém a função responsável por gerar um **ofício de cobrança em formato Microsoft Word (`.docx`)** utilizando a biblioteca `python-docx`. Este documento é destinado à entidade para formalizar a cobrança do valor de promoção de classe, incluindo instruções de pagamento e referências regulatórias.
+
+#### Configuração de Ambiente
+
+  * **`locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')`**: Tenta configurar o *locale* para o formato brasileiro, garantindo que o valor final do IPCA seja formatado corretamente (`R$ X.XXX,XX`).
+
+#### Função Principal: `create_word_doc()`
+
+Esta função recebe o caminho de saída e os dados processados para gerar o ofício.
+
+| Parâmetro | Descrição |
+| :--- | :--- |
+| **`file_path_docx`** | Caminho completo onde o arquivo `.docx` final será salvo. |
+| **`data`** | Dicionário contendo os dados do processo, endereçamento, e o valor final corrigido pelo IPCA. |
+
+#### Fluxo de Execução
+
+1.  **Extração e Formatação de Dados**:
+      * O script extrai as variáveis de interesse (`entidade`, `cnpj`, `endereco`, `ipca`, `fistel`, etc.) do dicionário `data`.
+      * O valor do IPCA (`ipca`) é formatado no padrão monetário brasileiro e armazenado em `ipca_normalized`.
+2.  **Criação e Estilos**:
+      * Inicializa o objeto `Document()`.
+      * Define a fonte padrão do documento como **Arial, tamanho 10pt**.
+3.  **Bloco de Destinatário**:
+      * Cria o bloco de destinatário formatado com **negrito** no nome da entidade e no CNPJ.
+      * Inclui o endereço completo (`endereco`, `cep`, `municipio/uf`).
+4.  **Assunto e Referência**:
+      * Insere o assunto ("Alteração de Plano Básico com mudança de grupo...") e o número do processo (Referência) em **negrito**.
+5.  **Corpo do Ofício (Parágrafos Numerados)**:
+      * **Ponto 1**: Informa que a **GRU (Guia de Recolhimento da União)** está disponível no sistema **SIGEC** da Anatel, referente à **promoção de classe**.
+      * **Ponto 2**: Explica que o valor foi calculado pela **Portaria de Consolidação GM/MCom nº 1/2023** e foi **atualizado pelo IPCA** desde agosto de 2013.
+6.  **Tabela de Cobrança**:
+      * Insere uma tabela formatada (`Table Grid`) com 2 linhas e 5 colunas.
+      * **Cabeçalho**: Define as colunas como `UF/MUNICÍPIO`, `CNPJ`, `FISTEL`, `CANAL`, e **`VALOR (R$)`**.
+      * **Dados**: Preenche a linha de dados com as informações do processo e o `ipca_normalized`.
+7.  **Instruções de Pagamento (Ponto 3)**:
+      * Fornece um **passo a passo detalhado** (itens a a g) para que a entidade acesse o *site* da Anatel e consiga imprimir a Guia de Recolhimento (GRU).
+8.  **Bloco Final (Ponto 4)**:
+      * Menciona o **art. 31, §1º da Portaria GM/MCom nº 1/2023**, que condiciona a alteração no Plano Básico à confirmação do pagamento.
+      * Finaliza com o vocativo "Atenciosamente".
+9.  **Salvamento**: Chama `doc.save(file_path_docx)` para finalizar e salvar o documento.
+
+### Documentação do Código: `ipca.py`
+
+O arquivo `ipca.py` contém a lógica para buscar os índices do **IPCA (Índice Nacional de Preços ao Consumidor Amplo)** e aplicar a correção monetária em um valor base.
+
+#### Função Principal: `ipca_calculation()`
+
+Esta função recebe um valor monetário original e aplica a correção acumulada do IPCA, a partir de uma data de referência fixa até o índice mais recente disponível.
+
+| Parâmetro | Tipo | Descrição |
+| :--- | :--- | :--- |
+| **`valor_original`** | `float` | O valor monetário a ser corrigido. |
+| **`static_ipca_path`** | `str` | Caminho para o arquivo JSON estático de *fallback* (usado se a API falhar). |
+| **Retorno** | `tuple` | Retorna uma tupla contendo o valor corrigido (`float`) e a data final da correção (`str`). |
+
+#### Fluxo de Execução
+
+1.  **Configuração da Data Inicial**: A correção é sempre calculada a partir de **`01/08/2013`**, conforme a regulamentação do projeto.
+2.  **Busca de Dados (API vs. *Fallback*)**:
+      * **Prioridade (API)**: Tenta buscar os dados do índice IPCA na API pública do Banco Central do Brasil (BCB).
+      * **Mecanismo de Falha (*Fallback*)**: Se a requisição HTTP falhar (ex: erro de rede, *timeout*, ou erro do servidor), o código tenta carregar os dados do arquivo JSON estático fornecido em `static_ipca_path`.
+      * **Tratamento de Erros**: Se a API falhar E o arquivo estático não for encontrado ou estiver mal formatado, a função levanta um `ValueError` fatal.
+3.  **Processamento com Pandas**: Os dados carregados (seja da API ou do arquivo) são convertidos para um `pandas.DataFrame` para facilitar o cálculo.
+      * **Limpeza/Conversão**: As colunas 'data' e 'valor' são convertidas para tipos adequados (`datetime` e `numeric`).
+      * **Filtro**: O *DataFrame* é filtrado para garantir que os dados comecem na `data_inicial_str` (`01/08/2013`).
+4.  **Cálculo da Correção**:
+      * **Fator Mensal**: Cria uma nova coluna `fator_mensal` onde cada índice é transformado de percentual para fator (ex: $2\% \rightarrow 1.02$): $$Fator\ Mensal = 1 + (\frac{Valor\ do\ IPCA}{100})$$
+      * **Fator Acumulado**: O `fator_acumulado` é calculado como o **produto** de todos os `fator_mensal` (multiplicação acumulada).
+      * **Valor Corrigido**: O `valor_original` é multiplicado pelo `fator_acumulado` para obter o resultado final.
+5.  **Retorno**: Retorna o `valor_corrigido` e a `data_final_str` (a data mais recente do índice utilizado).
+
+#### Estrutura do Código (Resumo da Função `ipca_calculation`)
+
+```python
+def ipca_calculation(valor_original: float, static_ipca_path: str) -> tuple | None:
+    data_inicial_str = '01/08/2013'
+    # 1. Tenta buscar dados da API do BCB
+    try:
+        # ... requisição HTTP ...
+        dados = response.json()
+    # 2. Em caso de falha da API, tenta carregar do arquivo JSON estático
+    except requests.exceptions.RequestException:
+        # ... carrega do arquivo estático ...
+    
+    # 3. Processa dados com Pandas
+    df = pd.DataFrame(dados)
+    # 4. Filtra a partir de 01/08/2013
+    df = df[df['data'] >= data_inicial].copy()
+    
+    # 5. Calcula o Fator Acumulado (produto da série de fatores mensais)
+    df['fator_mensal'] = 1 + (df['valor'] / 100)
+    fator_acumulado = df['fator_mensal'].prod()
+    
+    # 6. Calcula o Valor Corrigido
+    valor_corrigido = valor_original * fator_acumulado
+    
+    return valor_corrigido, data_final_str
+```
+
+### Documentação do Código: `utils.py`
+
+O arquivo `utils.py` contém um conjunto de funções utilitárias projetadas para realizar o tratamento e a conversão de dados específicos do formulário, como coordenadas geográficas e formatação de texto.
+
+#### Função: `dms_for_decimal()`
+
+Esta função é crucial para o geoprocessamento, pois converte as coordenadas geográficas do formato **Graus, Minutos, Segundos (GMS)** inseridas pelo usuário para o formato **Decimal**.
+
+| Parâmetro | Tipo | Descrição |
+| :--- | :--- | :--- |
+| **`dms`** | `str` | A string de coordenadas no formato GMS (ex: `"10° 10' 10\" S"`). |
+| **Retorno** | `float` | O valor da coordenada no formato decimal, pronto para uso em cálculos geoespaciais. |
+
+##### Fluxo de Conversão:
+
+1.  **Pré-processamento**: A string de entrada é padronizada (convertida para maiúsculas, espaços removidos e caracteres como `'` e `"` corrigidos).
+2.  **Extração de Direção**: A função identifica a direção (N, S, E, W) usando uma expressão regular (`re.findall`).
+3.  **Cálculo Decimal**: Os componentes (grau, minuto, segundo) são separados e o valor decimal é calculado pela fórmula: $\text{Decimal} = \text{Grau} + \frac{\text{Minuto}}{60} + \frac{\text{Segundo}}{3600}$.
+4.  **Sinalização**: Se a direção contiver **Sul (`S`)** ou **Oeste (`W`)**, o valor decimal é negado (adiciona um sinal de menos), o que é o padrão para coordenadas no formato decimal.
+
+#### Função: `capitalizar_string()`
+
+Esta função é utilizada para garantir que as entradas de texto do formulário (como nomes de entidades, serviços e finalidades) estejam formatadas de maneira padronizada e legível, seguindo regras de capitalização específicas.
+
+| Parâmetro | Tipo | Descrição |
+| :--- | :--- | :--- |
+| **`texto`** | `str` | A string de texto a ser formatada. |
+| **Retorno** | `str` | A string formatada. |
+
+##### Regras de Capitalização:
+
+1.  **Palavras Minúsculas**: Palavras comuns como preposições e artigos (`de`, `em`, `do`, `da`, `e`, `o`, `a`, etc.) são mantidas em **minúsculas**.
+2.  **Siglas/Acrônimos**: Siglas importantes (`FM`, `AM`, `LTDA`, `TV`) são mantidas em **MAIÚSCULAS**.
+3.  **Outras Palavras**: Todas as outras palavras são capitalizadas (apenas a primeira letra em maiúscula).
+
+#### Estrutura do Código
+
+```python
+import re
+
+def dms_for_decimal(dms):
+    dms = dms.upper().strip().replace(' ', '').replace("’", "'").replace('”', '"').replace("''", '"').replace(',', '.')
+    direction = re.findall(r'[A-Z]', dms)
+    dms = re.sub(r'[A-Z]', '', dms)
+    degree = float(dms.split('°')[0])
+    minute = float(dms.split('°')[1].split("'")[0])
+    second = float(dms.split('°')[1].split("'")[1].split('"')[0])
+    decimal = degree + minute/60 + second/3600
+
+    if 'S' in direction or 'W' in direction:
+        decimal = -decimal
+
+    return decimal
+
+def capitalizar_string(texto):
+    texto = str(texto)
+    texto = texto.lower()
+
+    palavras_min = ['de', 'em', 'do', 'da', 'dos', 'das', 'e', 'o', 'a']    
+    palavras_max = ['fm', 'am', 'ltda', 'tv']
+    
+    palavras = texto.split()
+    
+    resultado = []
+    for palavra in palavras:
+        if palavra in palavras_min:
+            resultado.append(palavra)
+        elif palavra in palavras_max:
+            resultado.append(palavra.upper())
+        else:
+            resultado.append(palavra.capitalize())
+            
+    return ' '.join(resultado)
+```
+
+### Documentação do Código: `runtime_hook.py`
+
+O arquivo `runtime_hook.py` é um **script auxiliar** destinado a ser executado durante o processo de *runtime* (tempo de execução) de um executável criado pelo **PyInstaller** (congelamento de pacotes Python). Sua principal função é garantir que as dependências geoespaciais críticas (`pyogrio` e `shapely`) sejam carregadas corretamente, mesmo quando estão empacotadas.
+
+#### Fluxo de Execução
+
+1.  **Verificação do Ambiente**:
+      * O script inicia verificando se a aplicação está rodando como um executável congelado através da checagem de `getattr(sys, 'frozen', False)`. Se `frozen` for `True`, significa que está em um ambiente PyInstaller.
+2.  **Definição do Caminho Base**:
+      * Se for um executável, a variável `base_path` é definida como `sys._MEIPASS`. O `sys._MEIPASS` é o caminho para a pasta temporária onde o PyInstaller extrai todos os recursos e bibliotecas no momento da execução.
+3.  **Configuração do PATH (Essencial para Geoespacial)**:
+      * As bibliotecas geoespaciais, como `geopandas` (que usa `pyogrio` e `shapely`), dependem de DLLs e bibliotecas de baixo nível (como GDAL e GEOS).
+      * O script adiciona os caminhos dessas bibliotecas dentro da pasta temporária do PyInstaller (`pyogrio.libs` e `shapely.libs`) à variável de ambiente **`PATH`** do sistema.
+      * **Objetivo**: Ao modificar o `PATH`, o sistema operacional consegue encontrar as bibliotecas nativas necessárias para o funcionamento correto do `geopandas` e seus componentes, resolvendo problemas comuns de dependência em executáveis congelados.
+
+#### Estrutura do Código
+
+```python
+import os
+import sys
+
+# Verifica se esta rodando como um executável
+if getattr(sys, 'frozen', False):
+    
+    # sys._MEIPASS é o caminho para a pasta temporária do PyInstaller
+    base_path = sys._MEIPASS
+
+    # Adiciona a pasta das DLLs do pyogrio ao PATH
+    pyogrio_libs_path = os.path.join(base_path, 'pyogrio.libs')
+    os.environ['PATH'] = pyogrio_libs_path + os.pathsep + os.environ.get('PATH', '')
+    
+    # Adiciona a pasta das DLLs do shapely (geopandas também precisa dele)
+    shapely_libs_path = os.path.join(base_path, 'shapely.libs')
+    os.environ['PATH'] = shapely_libs_path + os.pathsep + os.environ.get('PATH', '')
+```
+
+Este gancho de *runtime* é um componente técnico que garante a **portabilidade** do projeto, permitindo que a aplicação funcione em computadores que não possuem as dependências geoespaciais instaladas globalmente.
+
+### Documentação do Código: `main.spec`
+
+O arquivo `main.spec` é o **arquivo de especificação** usado pela ferramenta **PyInstaller** para "congelar" a aplicação Python em um executável autônomo. Ele define todos os arquivos, bibliotecas e configurações necessárias para que o programa funcione sem a necessidade de um ambiente Python instalado no computador do usuário.
+
+#### Configurações Principais
+
+| Variável/Bloco | Descrição |
+| :--- | :--- |
+| **`SITE_PACKAGES_DIR`** | Define o caminho para o diretório `site-packages` dentro do ambiente virtual do projeto.É usado como base para localizar bibliotecas geoespaciais. |
+| **`binaries`** |Adiciona as **DLLs e bibliotecas binárias** necessárias para as dependências geoespaciais, como `pyogrio.libs` e `shapely.libs`.Isso é fundamental para o funcionamento do `geopandas`. |
+| **`datas`** |Lista os arquivos e diretórios de dados que devem ser incluídos no executável.Inclui: * O diretório **`data`** do projeto (contendo JSONs e Shapefiles). *O diretório **`pyogrio\gdal_data`** (contendo arquivos de configuração internos do GDAL). |
+| **`hiddenimports`** |Lista módulos que o PyInstaller pode falhar em detectar automaticamente, garantindo que sejam explicitamente incluídos (ex: `pyogrio` e seus submódulos). |
+| **`runtime_hooks`** |Define scripts Python a serem executados imediatamente antes do `main.py` ser iniciado no executável.O script **`runtime_hook.py`** é usado para configurar a variável de ambiente `PATH` para que as DLLs geoespaciais sejam encontradas. |
+| **`Analysis`** |Bloco principal que analisa o script de entrada (`main.py`) e coleta as dependências. |
+| **`EXE`** |Bloco que cria o arquivo executável final.Define o nome de saída como `promocao_classe` e usa `console=False` para criar uma aplicação **sem janela de console** (GUI). |
+| **`COLLECT`** |Bloco que agrupa (`collect`) o executável, binários e dados em um único diretório de distribuição. |
+
+#### Objetivo
+
+O arquivo `main.spec` tem o objetivo de **empacotar** a aplicação (`main.py`) juntamente com todas as bibliotecas necessárias, prestando atenção especial às dependências complexas de geoprocessamento (`pyogrio` e `shapely`), que exigem inclusão manual de DLLs (`binaries`) e configurações (`datas`, `runtime_hooks`) para garantir que o executável funcione em qualquer ambiente Windows.
