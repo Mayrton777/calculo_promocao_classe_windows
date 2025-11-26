@@ -8,7 +8,7 @@ Para executar este projeto, é **necessário** instalar as dependências listada
 
 1.  **Acessar a pasta `project`**
     ```bash
-    cd project
+    cd calculo_promocao_classe_windows
     ```
 
 2.  **Criar e ativar um ambiente virtual**
@@ -627,5 +627,6 @@ O arquivo `main.spec` é o **arquivo de especificação** usado pela ferramenta 
 | **`COLLECT`** |Bloco que agrupa (`collect`) o executável, binários e dados em um único diretório de distribuição. |
 
 #### Objetivo
+
 
 O arquivo `main.spec` tem o objetivo de **empacotar** a aplicação (`main.py`) juntamente com todas as bibliotecas necessárias, prestando atenção especial às dependências complexas de geoprocessamento (`pyogrio` e `shapely`), que exigem inclusão manual de DLLs (`binaries`) e configurações (`datas`, `runtime_hooks`) para garantir que o executável funcione em qualquer ambiente Windows.
